@@ -6,8 +6,14 @@ import re
 import sublime, sublime_plugin
 
 
+class ElmRescrollCommand(sublime_plugin.TextCommand):
+    def run(self, edit, x, y):
+        self.view.set_viewport_position((x, y), False)
+
+
 class ElmFormatCommand(sublime_plugin.TextCommand):
     def run(self, edit):
+        prev_viewport_position = self.view.viewport_position()
 
         # Hide the console window on Windows
         shell = False
@@ -23,13 +29,15 @@ class ElmFormatCommand(sublime_plugin.TextCommand):
             old_path = os.environ['PATH']
             os.environ['PATH'] = os.path.expandvars(path + path_separator + '$PATH')
 
-        command = [binary, self.view.file_name(), '--yes']
+        command = [binary, self.view.file_name(), '--yes', '--elm-version=0.19']
         p = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=shell)
 
         if path:
             os.environ['PATH'] = old_path
 
         output, errors = p.communicate()
+        rescroll = lambda: self.view.run_command('elm_rescroll', { "x": prev_viewport_position[0], "y": prev_viewport_position[1] })
+        sublime.set_timeout(rescroll, 700)
 
         if errors.strip():
             # If there is a error while running it. It should show the syntax errors
@@ -38,7 +46,7 @@ class ElmFormatCommand(sublime_plugin.TextCommand):
             panel_view.run_command('erase_view')
 
             # elm-format should have a --no-color option https://github.com/avh4/elm-format/issues/372
-            errors = re.sub('\x1b\[\d{1,2}m', '', errors.strip().decode())
+            errors = re.sub('\x1b\\[\\d{1,2}m', '', errors.strip().decode())
 
             panel_view.run_command('append', {'characters': errors})
             panel_view.set_read_only(True)
